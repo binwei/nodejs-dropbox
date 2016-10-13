@@ -16,18 +16,23 @@
   },
   "repository": {
     "type": "git",
-    "url": "git://github.com/CrabDude/nodejs-dropbox.git"
+    "url": "git://github.com/binwei/nodejs-dropbox.git"
   },
   "author": "Adam Crabtree",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/CrabDude/nodejs-dropbox/issues"
+    "url": "https://github.com/binwei/nodejs-dropbox/issues"
   },
-  "homepage": "https://github.com/CrabDude/nodejs-dropbox#readme",
+  "homepage": "https://github.com/binwei/nodejs-dropbox#readme",
   "dependencies": {
     "babel-cli": "^6.16.0",
     "babel-preset-nodev6": "^1.0.0",
     "babel-register": "^6.14.0",
+    "boom": "^4.2.0",
+    "hapi": "^15.1.1",
+    "hapi-async-handler": "^1.0.3",
+    "mime-types": "^2.1.12",
+    "nodeify": "^1.0.0",
     "nodemon": "^1.10.2",
     "npm-run-all": "^3.1.0",
     "songbird": "^1.0.4",

@@ -19,21 +19,26 @@ const ROOT_DIR = path.resolve(argv.dir)
 const net = require('net')
 const JsonSocket = require('json-socket')
 
+// record outstanding client sockets -- used for broadcasting each message
 const jsonSockets = []
 
 let {mkdir, rm} = require('./fileUtils')
 
 const chokidar = require('chokidar')
+// temporarily block file/dir being updated/deleted via http request -- otherwise duplicate messages will be sent to clients
+const unwatchedFiles = []
 
 function getLocalFilePathFromRequest(request) {
     return path.join(ROOT_DIR, request.params.file || '')
 }
 
+// pre processing to get file/dir stat
 const preStat = async function (request, reply) {
     const filePath = getLocalFilePathFromRequest(request)
     await fs.stat(filePath).then(stat => reply(stat), ()=> reply(null))
 }
 
+// pre processing to get mime type
 const preMimeType = async function (request, reply) {
     const stat = request.pre.stat
 
@@ -54,6 +59,7 @@ async function readHandler(request, reply) {
 
     const mimeType = request.pre.mimeType
 
+    // no separate HEAD handler
     if (request.method == 'head') return reply().type(mimeType)
 
     if (stat.isDirectory()) {
@@ -89,6 +95,9 @@ async function readHandler(request, reply) {
         .header('Content-Length', data.length)
 }
 
+// broadcast message to TCP clients
+// action: 'delete' or 'update/write'
+// path: relative path of file/dir
 function sendJsonMessageOverTcp(action, path, isDir) {
     const message = {action: action, path: path, type: isDir ? 'dir' : 'file', updated: Date.now()}
     for (let s of jsonSockets) {
@@ -105,6 +114,8 @@ async function createHandler(request, reply) {
 
     let endsWithSlash = filePath.charAt(filePath.length - 1) === path.sep
     let hasExt = path.extname(filePath) !== ''
+
+    unwatchedFiles.push(filePath)
 
     if (endsWithSlash || !hasExt) {
         console.log(`Making directory ${filePath}`)
@@ -136,6 +147,8 @@ async function updateHandler(request, reply) {
 
     const filePath = getLocalFilePathFromRequest(request)
 
+    unwatchedFiles.push(filePath)
+
     console.log(`Updating ${filePath}`)
     const writable = require('fs').createWriteStream(filePath)
 
@@ -155,6 +168,8 @@ async function deleteHandler(request, reply) {
 
     const filePath = getLocalFilePathFromRequest(request)
     console.log(`Deleting ${filePath}`)
+
+    unwatchedFiles.push(filePath)
 
     if (stat.isDirectory()) await rimraf(filePath)
     else await rm(filePath)
@@ -247,8 +262,19 @@ async function main() {
     })
 
     tcpServer.on('connection', handleTcpConnection)
+
+    let watcher = chokidar.watch(ROOT_DIR, {ignored: /[\/\\]\./})
+    watcher
+        .on('add', watchFileChange)
+        .on('change', watchFileChange)
+        .on('unlink', watchFileDeletion)
+        .on('addDir', watchDirChange)
+        .on('unlinkDir', watchDirDeletion)
 }
 
+//
+// ------- TCP connection handler -------
+//
 function handleTcpConnection(socket) {
     var remoteAddress = socket.remoteAddress + ':' + socket.remotePort;
     console.log('new client connection from %s', remoteAddress);
@@ -276,29 +302,30 @@ function handleTcpConnection(socket) {
     }
 }
 
+//
+// ------- FS watcher handlers -------
+//
+function removeUnwatchedFile(absolutePath) {
+    let i = unwatchedFiles.indexOf(absolutePath)
+    if (i !== -1) unwatchedFiles.splice(i, 1)
+    return i === -1
+}
+
 function watchFileChange(absolutePath) {
-    sendJsonMessageOverTcp('update', path.relative(ROOT_DIR, absolutePath), false)
+    if (removeUnwatchedFile(absolutePath)) sendJsonMessageOverTcp('update', path.relative(ROOT_DIR, absolutePath), false)
 }
 
 function watchFileDeletion(absolutePath) {
-    sendJsonMessageOverTcp('delete', path.relative(ROOT_DIR, absolutePath), false)
+    if (removeUnwatchedFile(absolutePath)) sendJsonMessageOverTcp('delete', path.relative(ROOT_DIR, absolutePath), false)
 }
 
 function watchDirChange(absolutePath) {
-    sendJsonMessageOverTcp('update', path.relative(ROOT_DIR, absolutePath), true)
+    if (removeUnwatchedFile(absolutePath)) sendJsonMessageOverTcp('update', path.relative(ROOT_DIR, absolutePath), true)
 }
 
 function watchDirDeletion(absolutePath) {
-    sendJsonMessageOverTcp('delete', path.relative(ROOT_DIR, absolutePath), true)
+    if (removeUnwatchedFile(absolutePath)) sendJsonMessageOverTcp('delete', path.relative(ROOT_DIR, absolutePath), true)
 }
-
-let watcher = chokidar.watch(ROOT_DIR, {ignored: /[\/\\]\./})
-watcher
-    .on('add', watchFileChange)
-    .on('change', watchFileChange)
-    .on('unlink', watchFileDeletion)
-    .on('addDir', watchDirChange)
-    .on('unlinkDir', watchDirDeletion)
 
 // npm start -- --dir files
 main()

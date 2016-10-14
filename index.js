@@ -16,6 +16,11 @@ const argv = require('yargs')
 
 const ROOT_DIR = path.resolve(argv.dir)
 
+const net = require('net')
+const JsonSocket = require('json-socket')
+
+const jsonSockets = []
+
 async function mkdir(filePath) {
     // Use 'await' in here
     var elements = filePath.split('/')
@@ -47,7 +52,7 @@ async function rm(filePath) {
 }
 
 function getLocalFilePathFromRequest(request) {
-    return path.join(ROOT_DIR, request.params.file)
+    return path.join(ROOT_DIR, request.params.file || '')
 }
 
 const preStat = async function (request, reply) {
@@ -110,6 +115,13 @@ async function readHandler(request, reply) {
         .header('Content-Length', data.length)
 }
 
+function appendMessage(action, path, isDir) {
+    const message = {action: action, path: path, type: isDir ? 'dir' : 'file', updated: Date.now()}
+    for (let s of jsonSockets) {
+        s.sendMessage(message)
+    }
+}
+
 async function createHandler(request, reply) {
     const stat = request.pre.stat
 
@@ -124,6 +136,7 @@ async function createHandler(request, reply) {
         console.log(`Making directory ${filePath}`)
         mkdir(filePath)
 
+        appendMessage("write", request.params.file, true)
         reply(`Created directory ${filePath}`)
     } else {
         console.log(`Creating file ${filePath}`)
@@ -133,6 +146,7 @@ async function createHandler(request, reply) {
         readable.pipe(writable)
 
         writable.on('finish', () => {
+            appendMessage("write", request.params.file, false)
             reply(`Created file ${request.params.file}`)
         })
     }
@@ -155,6 +169,7 @@ async function updateHandler(request, reply) {
     readable.pipe(writable)
 
     writable.on('finish', () => {
+        appendMessage("write", request.params.file, false)
         reply(`Updated file ${request.params.file}`)
     })
 }
@@ -170,6 +185,7 @@ async function deleteHandler(request, reply) {
     if (stat.isDirectory()) await rimraf(filePath)
     else await rm(filePath)
 
+    appendMessage("delete", request.params.file, stat.isDirectory())
     reply(`Deleted ${request.params.file}`)
 }
 
@@ -249,6 +265,40 @@ async function main() {
 
     await server.start()
     console.log(`LISTENING @ http://127.0.0.1:${port}`)
+
+    const tcpPort = 8001
+    const tcpServer = net.createServer()
+    tcpServer.listen(tcpPort, function () {
+        console.log(`TCP Server @ http://127.0.0.1:${tcpPort}`)
+    })
+
+    tcpServer.on('connection', handleTcpConnection)
+}
+
+function handleTcpConnection(socket) {
+    var remoteAddress = socket.remoteAddress + ':' + socket.remotePort;
+    console.log('new client connection from %s', remoteAddress);
+
+    socket = new JsonSocket(socket)
+    jsonSockets.push(socket)
+
+    socket.on('message', onJsonMessage);
+    socket.on('close', onSocketClose);
+    socket.on('error', onSocketError);
+
+    function onJsonMessage(message) {
+        console.log('connection data from %s: %j', remoteAddress, message);
+        socket.sendMessage(message);
+    }
+
+    function onSocketClose() {
+        jsonSockets.remove(socket)
+        console.log('connection from %s closed', remoteAddress);
+    }
+
+    function onSocketError(err) {
+        console.log('Connection %s error: %s', remoteAddress, err.message);
+    }
 }
 
 main()

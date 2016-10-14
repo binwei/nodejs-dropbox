@@ -25,6 +25,7 @@
   },
   "homepage": "https://github.com/binwei/nodejs-dropbox#readme",
   "dependencies": {
+    "archiver": "^1.1.0",
     "babel-cli": "^6.16.0",
     "babel-preset-nodev6": "^1.0.0",
     "babel-register": "^6.14.0",

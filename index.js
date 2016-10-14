@@ -8,6 +8,7 @@ const Hapi = require('hapi')
 const asyncHandlerPlugin = require('hapi-async-handler')
 const Boom = require('boom')
 const mime = require('mime-types')
+const archiver = require('archiver')
 
 async function mkdir(filePath) {
     // Use 'await' in here
@@ -49,44 +50,96 @@ async function rm(filePath) {
     else await fs.rmdir(filePath).catch(onException)
 }
 
-async function getLocalFilePathFromRequest(request) {
-    const filePath = path.join(__dirname, 'files', request.params.file)
-    await fs.stat(filePath).then(stat => request.stat = stat, ()=> request.stat = null)
-    return filePath
+function getLocalFilePathFromRequest(request) {
+    return path.join(__dirname, 'files', request.params.file)
+}
+
+const preStat = async function (request, reply) {
+    const filePath = getLocalFilePathFromRequest(request)
+    await fs.stat(filePath).then(stat => reply(stat), ()=> reply(null))
+}
+
+const preMimeType = async function (request, reply) {
+    const stat = request.pre.stat
+
+    if (null === stat) reply(null)
+    else if (stat.isDirectory()) {
+        // curl  http://127.0.0.1:8000/dir1 -H "Accept: application/x-gtar" --head
+        if (request.headers['accept'] === 'application/x-gtar') reply('application/zip')
+        else reply('application/json')
+    }
+    else reply(mime.contentType(path.extname(request.params.file)))
 }
 
 async function readHandler(request, reply) {
-    const filePath = await getLocalFilePathFromRequest(request)
+    const filePath = getLocalFilePathFromRequest(request)
+    const stat = request.pre.stat
 
-    if (null === request.stat) {
-        return reply(Boom.notFound(`Invalid path ${request.params.file}`))
-    }
+    if (null === stat) return reply(Boom.notFound(`Invalid path ${request.params.file}`))
 
-    if (request.stat.isDirectory()) {
-        let files = await fs.readdir(filePath)
-        console.log(`Reading directory ${filePath}`)
-        const payload = JSON.stringify(files)
-        return reply(payload)
-            .type('application/json')
-            .header('Content-Length', payload.length)
+    const mimeType = request.pre.mimeType
+
+    if (request.method == 'head') return reply().type(mimeType)
+
+    if (stat.isDirectory()) {
+        if (mimeType === 'application/zip') {
+            let archive = archiver('zip')
+            console.log(`Archiving directory ${filePath}`)
+            archive
+                .bulk([{
+                    expand: true,
+                    cwd: filePath,
+                    src: ['**'],
+                    dest: '.'
+                }])
+                .finalize()
+
+            return reply(archive)
+                .type(mimeType)
+        }
+        else {
+            let files = await fs.readdir(filePath)
+            console.log(`Reading directory ${filePath}`)
+            const payload = JSON.stringify(files)
+            return reply(payload)
+                .type(mimeType)
+                .header('Content-Length', payload.length)
+        }
     }
 
     console.log(`Reading file ${filePath}`)
     const data = await fs.readFile(filePath, 'utf8')
     return reply(data)
-        .type(mime.contentType(path.extname(filePath)))
+        .type(mimeType)
         .header('Content-Length', data.length)
 }
 
 async function createHandler(request, reply) {
-    /* eslint no-unused-expressions: 0 */
+    const stat = request.pre.stat
+
+    if (stat !== null) return reply(Boom.methodNotAllowed(`${request.params.file} exists`))
+
     const filePath = getLocalFilePathFromRequest(request)
 
-    console.log(`Creating ${filePath}`)
+    let endsWithSlash = filePath.charAt(filePath.length - 1) === path.sep
+    let hasExt = path.extname(filePath) !== ''
 
-    const stat = await fs.stat(filePath)
-    await stat.isDirectory() ? mkdir(filePath) : touch(filePath)
-    reply()
+    if (endsWithSlash || !hasExt) {
+        console.log(`Making directory ${filePath}`)
+        mkdir(filePath)
+
+        reply(`Created directory ${filePath}`)
+    } else {
+        console.log(`Creating file ${filePath}`)
+        const writable = require('fs').createWriteStream(filePath)
+
+        const readable = request.payload
+        readable.pipe(writable)
+
+        writable.on('finish', () => {
+            reply(`Created file ${request.params.file}`)
+        })
+    }
 }
 
 async function updateHandler(request, reply) {
@@ -120,6 +173,12 @@ async function main() {
         {
             method: 'GET',
             path: '/{file*}',
+            config: {
+                pre: [
+                    {method: preStat, assign: 'stat'},
+                    {method: preMimeType, assign: 'mimeType'}
+                ]
+            },
             handler: {
                 async: readHandler
             }
@@ -128,6 +187,15 @@ async function main() {
         {
             method: 'PUT',
             path: '/{file*}',
+            config: {
+                pre: [
+                    {method: preStat, assign: 'stat'}
+                ],
+                payload: {
+                    output: 'stream',
+                    parse: false
+                }
+            },
             handler: {
                 async: createHandler
             }

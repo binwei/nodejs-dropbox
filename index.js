@@ -23,6 +23,8 @@ const jsonSockets = []
 
 let {mkdir, rm} = require('./fileUtils')
 
+const chokidar = require('chokidar')
+
 function getLocalFilePathFromRequest(request) {
     return path.join(ROOT_DIR, request.params.file || '')
 }
@@ -274,4 +276,29 @@ function handleTcpConnection(socket) {
     }
 }
 
+function watchFileChange(absolutePath) {
+    sendJsonMessageOverTcp('update', path.relative(ROOT_DIR, absolutePath), false)
+}
+
+function watchFileDeletion(absolutePath) {
+    sendJsonMessageOverTcp('delete', path.relative(ROOT_DIR, absolutePath), false)
+}
+
+function watchDirChange(absolutePath) {
+    sendJsonMessageOverTcp('update', path.relative(ROOT_DIR, absolutePath), true)
+}
+
+function watchDirDeletion(absolutePath) {
+    sendJsonMessageOverTcp('delete', path.relative(ROOT_DIR, absolutePath), true)
+}
+
+let watcher = chokidar.watch(ROOT_DIR, {ignored: /[\/\\]\./})
+watcher
+    .on('add', watchFileChange)
+    .on('change', watchFileChange)
+    .on('unlink', watchFileDeletion)
+    .on('addDir', watchDirChange)
+    .on('unlinkDir', watchDirDeletion)
+
+// npm start -- --dir files
 main()

@@ -2,7 +2,7 @@
 
 This is a basic Dropbox clone to sync files across multiple remote folders.
 
-Time spent: `5 hours`
+Time spent: `7 hours`
 
 ## Features
 
@@ -19,7 +19,7 @@ Time spent: `5 hours`
 - [x] Client can make DELETE requests to delete files and folders
 - [x] Server will serve from `--dir` or cwd as root
 - [x] Server will sync `HTTP` modifications over TCP to the Client
-- [ ] Server will sync watched file modifications (e.g., `fs.watch`) over TCP to the Client
+- [x] Server will sync watched file modifications (e.g., `fs.watch`) over TCP to the Client
 
 ### Optional
 
@@ -29,7 +29,7 @@ Time spent: `5 hours`
 - [ ] Client will sync back to Server over TCP
 - [ ] Client will preserve a 'Conflict' file when pushed changes preceding local edits
 - [ ] Client can stream and scrub video files (e.g., on iOS)
-- [ ] Client can create a directory with an archive
+- [x] Client can create a directory with an archive
 - [ ] User can connect to the server using an FTP client
 
 

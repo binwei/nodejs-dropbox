@@ -45,15 +45,19 @@ function main() {
         socket.on('message', async function (message) {
             console.log('Server message: ' + message.action + ' ' + message.path + ' ' + message.type + ' ' + message.updated)
 
+            let localFilePath = getLocalFilePath(message.path);
             if (message.action === 'delete') {
-                if (message.type === 'file') await rm(getLocalFilePath(message.path))
-                else await rimraf(getLocalFilePath(message.path))
+                if (message.type === 'file') await rm(localFilePath)
+                else await rimraf(localFilePath)
+                console.log('Deleted ' + localFilePath)
             } else { // "update"
-                if (message.type == 'dir') await mkdir(getLocalFilePath(message.path))
-                else request({url: httpServerUrl + message.path}, httpServerUrl).pipe(fs.createWriteStream(getLocalFilePath(message.path), 'utf-8'))
+                if (message.type == 'dir') await mkdir(localFilePath)
+                else request({url: httpServerUrl + message.path}, httpServerUrl).pipe(fs.createWriteStream(localFilePath, 'utf-8'))
+                console.log('Created/updated ' + localFilePath)
             }
         })
     })
 }
 
+// npm run client -- --dir /tmp/client-test/
 main()

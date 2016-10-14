@@ -6,9 +6,15 @@ const path = require('path')
 const fs = require('fs').promise
 const Hapi = require('hapi')
 const asyncHandlerPlugin = require('hapi-async-handler')
-const Boom = require('boom')
+const boom = require('boom')
 const mime = require('mime-types')
 const archiver = require('archiver')
+const rimraf = require('rimraf').promise
+const argv = require('yargs')
+    .default('dir', process.cwd())
+    .argv
+
+const ROOT_DIR = path.resolve(argv.dir)
 
 async function mkdir(filePath) {
     // Use 'await' in here
@@ -28,16 +34,6 @@ async function mkdir(filePath) {
     }
 }
 
-async function touch(filePath) {
-    // Use 'await' in here
-    let [fd, stat] = await Promise.all([
-        fs.open(filePath, 'wx'),
-        fs.stat(filePath)
-    ])
-
-    await fs.futimes(fd, stat.atime.getTime(), Date.now() / 1000)
-}
-
 async function rm(filePath) {
     // Use 'await' in here
     function onException(err) {
@@ -51,7 +47,7 @@ async function rm(filePath) {
 }
 
 function getLocalFilePathFromRequest(request) {
-    return path.join(__dirname, 'files', request.params.file)
+    return path.join(ROOT_DIR, request.params.file)
 }
 
 const preStat = async function (request, reply) {
@@ -75,7 +71,7 @@ async function readHandler(request, reply) {
     const filePath = getLocalFilePathFromRequest(request)
     const stat = request.pre.stat
 
-    if (null === stat) return reply(Boom.notFound(`Invalid path ${request.params.file}`))
+    if (null === stat) return reply(boom.notFound(`Invalid path ${request.params.file}`))
 
     const mimeType = request.pre.mimeType
 
@@ -117,7 +113,7 @@ async function readHandler(request, reply) {
 async function createHandler(request, reply) {
     const stat = request.pre.stat
 
-    if (stat !== null) return reply(Boom.methodNotAllowed(`${request.params.file} exists`))
+    if (stat !== null) return reply(boom.methodNotAllowed(`${request.params.file} exists`))
 
     const filePath = getLocalFilePathFromRequest(request)
 
@@ -142,20 +138,39 @@ async function createHandler(request, reply) {
     }
 }
 
+// curl -X POST -H "Content-Type: application/json" -d '{"key1":"value"}' http://127.0.0.1:8000/bar.txt
+// curl -X PUT -H "Content-Type: text/html" -d @files/foo.txt http://127.0.0.1:8000/bar.txt
 async function updateHandler(request, reply) {
+    const stat = request.pre.stat
+
+    if (stat === null) return reply(boom.notFound(`Invalid path ${request.params.file}`))
+    if (stat.isDirectory()) return reply(boom.methodNotAllowed(`${request.params.file} is a directory`))
+
     const filePath = getLocalFilePathFromRequest(request)
 
     console.log(`Updating ${filePath}`)
-    await fs.writeFile(filePath, request.payload)
-    reply()
+    const writable = require('fs').createWriteStream(filePath)
+
+    const readable = request.payload
+    readable.pipe(writable)
+
+    writable.on('finish', () => {
+        reply(`Updated file ${request.params.file}`)
+    })
 }
 
 async function deleteHandler(request, reply) {
-    const filePath = getLocalFilePathFromRequest(request)
+    const stat = request.pre.stat
 
+    if (stat === null) return reply(boom.notFound(`Invalid path ${request.params.file}`))
+
+    const filePath = getLocalFilePathFromRequest(request)
     console.log(`Deleting ${filePath}`)
-    await rm(filePath)
-    reply()
+
+    if (stat.isDirectory()) await rimraf(filePath)
+    else await rm(filePath)
+
+    reply(`Deleted ${request.params.file}`)
 }
 
 async function main() {
@@ -204,6 +219,15 @@ async function main() {
         {
             method: 'POST',
             path: '/{file*}',
+            config: {
+                pre: [
+                    {method: preStat, assign: 'stat'}
+                ],
+                payload: {
+                    output: 'stream',
+                    parse: false
+                }
+            },
             handler: {
                 async: updateHandler
             }
@@ -212,6 +236,11 @@ async function main() {
         {
             method: 'DELETE',
             path: '/{file*}',
+            config: {
+                pre: [
+                    {method: preStat, assign: 'stat'}
+                ]
+            },
             handler: {
                 async: deleteHandler
             }

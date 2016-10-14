@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "nodemon  --exec 'babel-node -- ./' -- ",
+    "client": "nodemon  --exec 'babel-node -- ./client' -- ",
     "once": "babel-node -- ./",
     "test": "mocha --compilers js:babel-register test/spec",
     "dev": "run-p start watch:test watch:lint",

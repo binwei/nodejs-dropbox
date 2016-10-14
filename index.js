@@ -21,35 +21,7 @@ const JsonSocket = require('json-socket')
 
 const jsonSockets = []
 
-async function mkdir(filePath) {
-    // Use 'await' in here
-    var elements = filePath.split('/')
-    var dir = elements[0] === '' ? '/' : ''
-    for (let e of elements) {
-        dir = path.join(dir, e)
-        await fs.stat(dir).then(stat => {
-            if (stat.isFile()) {
-                console.log('Error: ' + dir + " is an existing file")
-                return
-            }
-            if (!stat.isDirectory()) fs.mkdir(dir)
-        }, err => {
-            fs.mkdir(dir)
-        })
-    }
-}
-
-async function rm(filePath) {
-    // Use 'await' in here
-    function onException(err) {
-        console.log(err.message)
-    }
-
-    let stat = await fs.stat(filePath).catch(onException)
-    if (stat === undefined) return
-    if (!stat.isDirectory()) await fs.unlink(filePath).catch(onException)
-    else await fs.rmdir(filePath).catch(onException)
-}
+let {mkdir, rm} = require('./fileUtils')
 
 function getLocalFilePathFromRequest(request) {
     return path.join(ROOT_DIR, request.params.file || '')
@@ -115,7 +87,7 @@ async function readHandler(request, reply) {
         .header('Content-Length', data.length)
 }
 
-function appendMessage(action, path, isDir) {
+function sendJsonMessageOverTcp(action, path, isDir) {
     const message = {action: action, path: path, type: isDir ? 'dir' : 'file', updated: Date.now()}
     for (let s of jsonSockets) {
         s.sendMessage(message)
@@ -136,7 +108,7 @@ async function createHandler(request, reply) {
         console.log(`Making directory ${filePath}`)
         mkdir(filePath)
 
-        appendMessage("write", request.params.file, true)
+        sendJsonMessageOverTcp("write", request.params.file, true)
         reply(`Created directory ${filePath}`)
     } else {
         console.log(`Creating file ${filePath}`)
@@ -146,7 +118,7 @@ async function createHandler(request, reply) {
         readable.pipe(writable)
 
         writable.on('finish', () => {
-            appendMessage("write", request.params.file, false)
+            sendJsonMessageOverTcp("write", request.params.file, false)
             reply(`Created file ${request.params.file}`)
         })
     }
@@ -169,7 +141,7 @@ async function updateHandler(request, reply) {
     readable.pipe(writable)
 
     writable.on('finish', () => {
-        appendMessage("write", request.params.file, false)
+        sendJsonMessageOverTcp("write", request.params.file, false)
         reply(`Updated file ${request.params.file}`)
     })
 }
@@ -185,7 +157,7 @@ async function deleteHandler(request, reply) {
     if (stat.isDirectory()) await rimraf(filePath)
     else await rm(filePath)
 
-    appendMessage("delete", request.params.file, stat.isDirectory())
+    sendJsonMessageOverTcp("delete", request.params.file, stat.isDirectory())
     reply(`Deleted ${request.params.file}`)
 }
 
@@ -292,7 +264,8 @@ function handleTcpConnection(socket) {
     }
 
     function onSocketClose() {
-        jsonSockets.remove(socket)
+        let i = jsonSockets.indexOf(socket)
+        if (i !== -1) jsonSockets.splice(i, 1)
         console.log('connection from %s closed', remoteAddress);
     }
 

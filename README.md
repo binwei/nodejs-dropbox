@@ -18,16 +18,16 @@ Time spent: `5 hours`
 - [x] Client can make POST requests to update the contents of a file
 - [x] Client can make DELETE requests to delete files and folders
 - [x] Server will serve from `--dir` or cwd as root
-- [ ] Server will sync `HTTP` modifications over TCP to the Client
+- [x] Server will sync `HTTP` modifications over TCP to the Client
 - [ ] Server will sync watched file modifications (e.g., `fs.watch`) over TCP to the Client
 
 ### Optional
 
-- [ ] Client supports multiple connected clients
+- [x] Client supports multiple connected clients
 - [ ] Client does not need to make additional `GET` request on `"write"` update
 - [ ] Client and User will be redirected from HTTP to HTTPS
 - [ ] Client will sync back to Server over TCP
-- [ ] Client will preserve a 'Conflict' file when pushed changes preceeding local edits
+- [ ] Client will preserve a 'Conflict' file when pushed changes preceding local edits
 - [ ] Client can stream and scrub video files (e.g., on iOS)
 - [ ] Client can create a directory with an archive
 - [ ] User can connect to the server using an FTP client

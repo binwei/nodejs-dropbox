@@ -22,7 +22,7 @@ const JsonSocket = require('json-socket')
 // record outstanding client sockets -- used for broadcasting each message
 const jsonSockets = []
 
-let {mkdir, rm} = require('./fileUtils')
+let {mkdir, rm, ls, touch} = require('./crud')
 
 const chokidar = require('chokidar')
 // temporarily block file/dir being updated/deleted via http request -- otherwise duplicate messages will be sent to clients
@@ -100,11 +100,13 @@ async function readHandler(request, reply) {
 // path: relative path of file/dir
 function sendJsonMessageOverTcp(action, path, isDir) {
     const message = {action: action, path: path, type: isDir ? 'dir' : 'file', updated: Date.now()}
+    console.log('broadcasting message %j', message)
     for (let s of jsonSockets) {
         s.sendMessage(message)
     }
 }
 
+// curl -X PUT -H "Content-Type: text/html" -d @files/foo.txt http://127.0.0.1:8000/bar.txt
 async function createHandler(request, reply) {
     const stat = request.pre.stat
 
@@ -137,8 +139,8 @@ async function createHandler(request, reply) {
     }
 }
 
+// curl -X POST --data-binary @/tmp/hello.txt http://127.0.0.1:8000/bar.txt
 // curl -X POST -H "Content-Type: application/json" -d '{"key1":"value"}' http://127.0.0.1:8000/bar.txt
-// curl -X PUT -H "Content-Type: text/html" -d @files/foo.txt http://127.0.0.1:8000/bar.txt
 async function updateHandler(request, reply) {
     const stat = request.pre.stat
 
@@ -150,7 +152,7 @@ async function updateHandler(request, reply) {
     unwatchedFiles.push(filePath)
 
     console.log(`Updating ${filePath}`)
-    const writable = require('fs').createWriteStream(filePath)
+    const writable = require('fs').createWriteStream(filePath, {flag: 'w+'})
 
     const readable = request.payload
     readable.pipe(writable)
@@ -286,19 +288,32 @@ function handleTcpConnection(socket) {
     socket.on('close', onSocketClose);
     socket.on('error', onSocketError);
 
-    function onJsonMessage(message) {
-        console.log('connection data from %s: %j', remoteAddress, message);
-        socket.sendMessage(message);
+    async function onJsonMessage(message) {
+        console.log('Received client request from %s: %j', remoteAddress, message)
+        for (let s of jsonSockets) {
+            s.sendMessage(message)
+        }
+        const filePath = path.join(ROOT_DIR, message.path || '')
+        unwatchedFiles.push(filePath)
+        if (message.action === 'delete') {
+            console.log('Deleting on behalf of client %s %s', message.type, filePath)
+            if (message.type === 'dir') await rimraf(filePath)
+            else await rm(filePath)
+        } else {
+            console.log('Making %s %s on behalf of client', message.type, filePath)
+            if (message.type === 'dir') await mkdir(filePath)
+            else await touch(filePath)
+        }
     }
 
     function onSocketClose() {
         let i = jsonSockets.indexOf(socket)
         if (i !== -1) jsonSockets.splice(i, 1)
-        console.log('connection from %s closed', remoteAddress);
+        console.log('connection from %s closed', remoteAddress)
     }
 
     function onSocketError(err) {
-        console.log('Connection %s error: %s', remoteAddress, err.message);
+        console.log('Connection %s error: %s', remoteAddress, err.message)
     }
 }
 

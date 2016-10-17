@@ -37,4 +37,31 @@ async function rm(filePath) {
     else await fs.rmdir(filePath).catch(onException)
 }
 
-module.exports = {mkdir, rm}
+async function ls(filePath) {
+    let stat = await fs.stat(filePath)
+    if (!stat.isDirectory()) return [filePath]
+
+    let fileNames = []
+    fileNames.push(filePath)
+
+    for (let fileName of await fs.readdir(filePath)) {
+        // Obtain the stat promise from fs.stat(filePath)
+        var childPath = path.join(filePath, fileName)
+        let result = await ls(childPath)
+        fileNames.push(...result)
+    }
+
+    return fileNames
+}
+
+async function touch(filePath) {
+    // Use 'await' in here
+    let [fd, stat] = await Promise.all([
+        fs.open(filePath, 'a+'),
+        fs.stat(filePath)
+    ])
+
+    await fs.futimes(fd, stat.atime.getTime(), Date.now() / 1000)
+}
+
+module.exports = {mkdir, rm, ls, touch}

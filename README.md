@@ -2,7 +2,7 @@
 
 This is a basic Dropbox clone to sync files across multiple remote folders.
 
-Time spent: `7 hours`
+Time spent: `12 hours`
 
 ## Features
 
@@ -26,7 +26,7 @@ Time spent: `7 hours`
 - [x] Client supports multiple connected clients
 - [ ] Client does not need to make additional `GET` request on `"write"` update
 - [ ] Client and User will be redirected from HTTP to HTTPS
-- [ ] Client will sync back to Server over TCP
+- [x] Client will sync back to Server over TCP
 - [ ] Client will preserve a 'Conflict' file when pushed changes preceding local edits
 - [ ] Client can stream and scrub video files (e.g., on iOS)
 - [x] Client can create a directory with an archive

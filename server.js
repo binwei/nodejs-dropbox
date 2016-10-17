@@ -100,7 +100,6 @@ async function readHandler(request, reply) {
 // path: relative path of file/dir
 function sendJsonMessageOverTcp(action, path, isDir) {
     const message = {action: action, path: path, type: isDir ? 'dir' : 'file', updated: Date.now()}
-    console.log('broadcasting message %j', message)
     for (let s of jsonSockets) {
         s.sendMessage(message)
     }

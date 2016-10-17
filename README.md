@@ -2,15 +2,15 @@
 
 This is a basic Dropbox clone to sync files across multiple remote folders.
 
-Time spent: `12 hours`
+Time spent: `14 hours`
 
 ## Features
 
 ### Required
 
 - [x] Completed Requireds marked with `[x]`
-- [ ] Walkthrough Gif embedded in README
-- [ ] README `Time spent:` includes the number of hours spent on the assignment
+- [x] Walkthrough Gif embedded in README
+- [x] README `Time spent:` includes the number of hours spent on the assignment
 - [x] Client can make GET requests to get file or directory contents
 - [x] Client can download a directory as an archive
 - [x] Client can make HEAD request to get just the GET headers 
@@ -35,8 +35,4 @@ Time spent: `12 hours`
 
 ## Walkthrough
 
-`<Add your Walkthrough Gif here (by updating the image URL)>`
-![Video Walkthrough](...)
-
-
-
+![Video Walkthrough](https://cloud.githubusercontent.com/assets/1187392/19458528/7949d276-9481-11e6-9f3c-f09e0d698dec.gif)
